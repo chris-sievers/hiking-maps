@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>US Hiking Bucket List</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0c1021;
+    --bg-card: #131a2e;
+    --bg-card-hover: #182240;
+    --bg-stat: #0e1628;
+    --accent-gold: #e8b84b;
+    --accent-gold-dim: rgba(232,184,75,0.15);
+    --accent-rose: #d4556b;
+    --accent-rose-dim: rgba(212,85,107,0.12);
+    --text-primary: #e8ecf4;
+    --text-secondary: #7b8bb5;
+    --text-dim: #4a5677;
+    --border-subtle: rgba(255,255,255,0.06);
+    --tucson: #f0913a;
+    --cincinnati: #4d9cf5;
+    --philly: #9b6dff;
+    --panel-w: 400px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg-deep); color: var(--text-primary); overflow: hidden; }
+  #map { position: fixed; top: 0; left: var(--panel-w); right: 0; bottom: 0; z-index: 1; }
+  #panel {
+    position: fixed; top: 0; left: 0; width: var(--panel-w); height: 100vh;
+    background: var(--bg-deep);
+    overflow-y: auto; z-index: 2;
+    border-right: 1px solid var(--border-subtle);
+  }
+  #panel::-webkit-scrollbar { width: 5px; }
+  #panel::-webkit-scrollbar-track { background: transparent; }
+  #panel::-webkit-scrollbar-thumb { background: rgba(232,184,75,0.2); border-radius: 4px; }
+
+  /* ---- Header ---- */
+  .panel-header {
+    padding: 28px 24px 20px;
+    background: linear-gradient(180deg, rgba(232,184,75,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .panel-header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px; font-weight: 800; color: var(--accent-gold);
+    letter-spacing: -0.3px;
+  }
+  .panel-header .subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 6px; font-weight: 400; }
+
+  /* ---- Cards ---- */
+  .hike-card {
+    margin: 8px 14px; padding: 0; background: var(--bg-card);
+    border-radius: 14px; cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden; position: relative;
+  }
+  .hike-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: transparent; transition: background 0.25s; border-radius: 14px 0 0 14px; z-index: 2;
+  }
+  .hike-card:hover { background: var(--bg-card-hover); border-color: rgba(232,184,75,0.15); transform: translateY(-1px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .hike-card:hover::before { background: var(--accent-gold); }
+  .hike-card.active { background: var(--bg-card-hover); border-color: rgba(232,184,75,0.25); box-shadow: 0 8px 32px rgba(232,184,75,0.08), 0 0 0 1px rgba(232,184,75,0.1); }
+  .hike-card.active::before { background: var(--accent-gold); }
+  .card-body { padding: 18px 20px 16px; }
+
+  /* Rank */
+  .rank-badge {
+    position: absolute; top: 14px; right: 16px;
+    font-size: 11px; font-weight: 700; color: var(--text-dim);
+    background: var(--bg-stat); border: 1px solid var(--border-subtle);
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    letter-spacing: -0.5px;
+  }
+
+  /* Name & Location */
+  .hike-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 17px; font-weight: 700; color: var(--text-primary);
+    margin-bottom: 3px; padding-right: 40px; line-height: 1.3;
+  }
+  .hike-location { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; font-weight: 400; }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px; margin-bottom: 14px;
+  }
+  .stat-item {
+    background: var(--bg-stat); border-radius: 8px; padding: 8px 10px;
+    border: 1px solid var(--border-subtle);
+  }
+  .stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); margin-bottom: 3px; font-weight: 500; }
+  .stat-value { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+  .stat-value .unit { font-size: 10px; font-weight: 400; color: var(--text-secondary); }
+
+  /* Difficulty */
+  .difficulty-row { margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .diff-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); font-weight: 500; }
+  .diff-bar { display: flex; gap: 3px; align-items: center; }
+  .diff-seg { width: 28px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.06); transition: background 0.2s; }
+  .diff-seg.filled { background: var(--accent-rose); }
+  .diff-seg.filled:nth-child(4) { background: #e06040; }
+  .diff-seg.filled:nth-child(5) { background: #e83a3a; }
+  .diff-text { font-size: 11px; color: var(--accent-rose); font-weight: 600; }
+
+  /* Description */
+  .desc { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .gmaps-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; background: var(--accent-rose); color: #fff;
+    border-radius: 8px; font-size: 11px; font-weight: 600;
+    text-decoration: none; transition: all 0.2s;
+    letter-spacing: 0.2px;
+  }
+  .gmaps-btn:hover { background: #c44a5e; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,85,107,0.3); }
+  .travel-toggle {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; background: var(--bg-stat); color: var(--text-secondary);
+    border: 1px solid var(--border-subtle); border-radius: 8px;
+    font-size: 11px; cursor: pointer; transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif; font-weight: 500;
+  }
+  .travel-toggle:hover { background: var(--bg-card-hover); color: var(--text-primary); border-color: rgba(232,184,75,0.2); }
+  .travel-toggle.open { background: var(--accent-gold-dim); color: var(--accent-gold); border-color: rgba(232,184,75,0.3); }
+
+  /* Travel info */
+  .travel-info { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1); }
+  .travel-info.open { max-height: 500px; }
+  .travel-info-inner {
+    padding: 14px 20px 10px;
+    background: rgba(0,0,0,0.15);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .origin-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+  }
+  .origin-row:last-child { border-bottom: none; }
+  .origin-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 5px; flex-shrink: 0;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .origin-dot.tucson { background: var(--tucson); color: var(--tucson); }
+  .origin-dot.cincinnati { background: var(--cincinnati); color: var(--cincinnati); }
+  .origin-dot.philly { background: var(--philly); color: var(--philly); }
+  .origin-detail { flex: 1; }
+  .origin-name { font-size: 11px; font-weight: 700; color: var(--text-primary); }
+  .origin-rec { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
+  .origin-note { font-size: 10px; color: var(--text-dim); margin-top: 2px; font-style: italic; }
+
+  /* ---- Map markers ---- */
+  .marker-glow {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent-gold);
+    box-shadow: 0 0 8px 3px rgba(232,184,75,0.35);
+    cursor: pointer; transition: all 0.3s;
+    border: 2px solid rgba(232,184,75,0.6);
+  }
+  .marker-glow.active {
+    animation: pulseActive 1.5s ease-in-out infinite;
+    background: var(--accent-gold);
+    border-color: var(--accent-gold);
+  }
+  .marker-glow.hover-glow {
+    animation: pulseHover 0.9s ease-in-out infinite;
+    background: var(--accent-gold);
+    border-color: var(--accent-gold);
+  }
+  @keyframes pulseActive {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 12px 5px rgba(232,184,75,0.45); }
+    50% { transform: scale(1.35); box-shadow: 0 0 22px 10px rgba(232,184,75,0.6); }
+  }
+  @keyframes pulseHover {
+    0%, 100% { transform: scale(1) translateY(0); box-shadow: 0 0 14px 6px rgba(232,184,75,0.5); }
+    50% { transform: scale(1.4) translateY(-5px); box-shadow: 0 0 26px 12px rgba(232,184,75,0.7); }
+  }
+
+  /* Travel line animations */
+  .travel-line-anim { stroke-dasharray: 12 8; animation: dashMove 1.5s linear infinite; }
+  @keyframes dashMove { to { stroke-dashoffset: -40; } }
+  .travel-icon { font-size: 18px; text-shadow: 0 0 6px rgba(0,0,0,0.8); }
+  .origin-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 8px rgba(0,0,0,0.5); }
+
+  /* Stagger card entrance */
+  .hike-card { opacity: 0; animation: cardIn 0.4s ease forwards; }
+  @keyframes cardIn { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
+
+  /* Mobile peek bar (hidden on desktop) */
+  .peek-bar { display: none; }
+  /* Mobile minimize button (hidden on desktop) */
+  .minimize-btn { display: none; }
+
+  /* ==================== RESPONSIVE ==================== */
+  @media (max-width: 820px) {
+    :root { --panel-w: 100vw; }
+
+    #map { left: 0; top: 0; bottom: 0; right: 0; z-index: 1; }
+
+    #panel {
+      position: fixed; top: auto; left: 0; right: 0; bottom: 0;
+      width: 100vw; height: 55vh;
+      border-right: none; border-top: 1px solid var(--border-subtle);
+      border-radius: 18px 18px 0 0;
+      transition: height 0.35s cubic-bezier(0.4,0,0.2,1);
+      z-index: 100;
+    }
+    #panel.minimized {
+      height: 0; overflow: hidden; pointer-events: none;
+    }
+
+    .panel-header {
+      padding: 14px 18px 12px;
+      border-radius: 18px 18px 0 0;
+    }
+    .panel-header::before {
+      content: ''; display: block; width: 36px; height: 4px;
+      background: rgba(255,255,255,0.2); border-radius: 2px;
+      margin: 0 auto 10px;
+    }
+    .panel-header h1 { font-size: 18px; }
+
+    .hike-card { margin: 6px 10px; }
+    .card-body { padding: 14px 16px 12px; }
+    .hike-name { font-size: 15px; }
+    .stats-grid { gap: 6px; }
+    .stat-item { padding: 6px 8px; }
+    .stat-value { font-size: 12px; }
+    .stat-label { font-size: 8px; }
+    .desc { font-size: 11.5px; margin-bottom: 10px; }
+    .difficulty-row { margin-bottom: 10px; }
+    .diff-seg { width: 22px; height: 4px; }
+
+    /* Minimize button in panel header */
+    .minimize-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      position: absolute; right: 16px; top: 18px;
+      padding: 5px 12px; border-radius: 8px;
+      background: var(--bg-stat); border: 1px solid var(--border-subtle);
+      color: var(--text-secondary); font-size: 11px; font-weight: 500;
+      font-family: 'DM Sans', sans-serif; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .minimize-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+
+    /* Peek bar: visible on mobile when panel is minimized */
+    .peek-bar {
+      display: none;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      z-index: 200;
+      background: var(--bg-card);
+      border-top: 1px solid rgba(232,184,75,0.2);
+      border-radius: 16px 16px 0 0;
+      padding: 10px 18px max(14px, env(safe-area-inset-bottom));
+      cursor: pointer;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+    }
+    .peek-bar::before {
+      content: ''; display: block; width: 36px; height: 4px;
+      background: rgba(255,255,255,0.25); border-radius: 2px;
+      margin: 0 auto 10px;
+    }
+    .peek-bar.visible { display: block; }
+    .peek-bar .peek-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 15px; font-weight: 700; color: var(--text-primary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .peek-bar .peek-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 5px;
+    }
+    .peek-bar .peek-location {
+      font-size: 11px; color: var(--text-secondary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      flex: 1;
+    }
+    .peek-bar .peek-expand {
+      font-size: 11px; color: var(--accent-gold);
+      font-weight: 600; flex-shrink: 0;
+      padding: 3px 10px; background: var(--accent-gold-dim);
+      border-radius: 12px; margin-left: 10px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <div class="panel-header">
+    <h1>🥾 US Hiking Bucket List</h1>
+    <div class="subtitle" id="hikeCount"></div>
+    <button class="minimize-btn" id="minimizeBtn">Show map ▼</button>
+  </div>
+  <div id="cardList"></div>
+</div>
+<div class="peek-bar" id="peekBar">
+  <div class="peek-name" id="peekName"></div>
+  <div class="peek-meta">
+    <div class="peek-location" id="peekLocation"></div>
+    <div class="peek-expand" id="peekExpand">▲ Details</div>
+  </div>
+</div>
+<div id="map"></div>
+
+<script>
+// ==================== HIKE DATA ====================
+const ORIGINS = {
+  tucsonAZ: { lat: 32.2226, lng: -110.9747, label: 'Tucson, AZ', color: '#f0913a', cssClass: 'tucson' },
+  cincinnatiOH: { lat: 39.1031, lng: -84.5120, label: 'Cincinnati, OH', color: '#4d9cf5', cssClass: 'cincinnati' },
+  philadelphiaPA: { lat: 39.9526, lng: -75.1652, label: 'Philadelphia, PA', color: '#9b6dff', cssClass: 'philly' }
+};
+
+const HIKES = [
+  // === ORIGINAL HIKES (kept: distance >= 4mi) ===
+  {
+    id:1, name:"Old Rag Mountain", location:"Shenandoah NP, Virginia", state:"VA",
+    lat:38.5553, lng:-78.3014, elevation:3284, distance:9.0, gain:2380, difficulty:4,
+    desc:"Virginia's most popular hike features an iconic granite rock scramble along a narrow ridgeline with exposed 360-degree summit views of the Blue Ridge Mountains.",
+    travel: {
+      tucsonAZ: { hours:32, rec:"fly", airport:"Washington Dulles (IAD)", flight:4.5, airDrive:2.0 },
+      cincinnatiOH: { hours:7.5, rec:"drive" },
+      philadelphiaPA: { hours:4.5, rec:"drive" }
+    }
+  },
+  {
+    id:2, name:"Mount LeConte via Alum Cave", location:"Great Smoky Mountains, Tennessee", state:"TN",
+    lat:35.6532, lng:-83.4438, elevation:6593, distance:10.0, gain:2560, difficulty:4,
+    desc:"The most dramatic route to the Smokies' third-highest peak passes through Arch Rock and exposed cliff faces to LeConte Lodge, the highest guest lodging in the eastern US.",
+    travel: {
+      tucsonAZ: { hours:26, rec:"fly", airport:"McGhee Tyson (TYS)", flight:4.0, airDrive:1.5 },
+      cincinnatiOH: { hours:4.5, rec:"drive" },
+      philadelphiaPA: { hours:9.5, rec:"fly", airport:"McGhee Tyson (TYS)", flight:2.0, airDrive:1.5 }
+    }
+  },
+  {
+    id:3, name:"Mount Mitchell", location:"Black Mountains, North Carolina", state:"NC",
+    lat:35.7648, lng:-82.2651, elevation:6684, distance:11.8, gain:3600, difficulty:3,
+    desc:"The highest peak east of the Mississippi offers a long climb through spruce-fir forests with an observation tower providing panoramic views stretching over 70 miles.",
+    travel: {
+      tucsonAZ: { hours:27, rec:"fly", airport:"Asheville Regional (AVL)", flight:4.5, airDrive:1.0 },
+      cincinnatiOH: { hours:6.0, rec:"drive" },
+      philadelphiaPA: { hours:9.0, rec:"fly", airport:"Asheville Regional (AVL)", flight:2.0, airDrive:1.0 }
+    }
+  },
+  {
+    id:4, name:"Grandfather Mountain", location:"Grandfather Mountain SP, North Carolina", state:"NC",
+    lat:36.0998, lng:-81.8243, elevation:5964, distance:7.6, gain:2000, difficulty:4,
+    desc:"The Profile Trail ascends relentlessly through rocky terrain with exposed ladder sections and scrambles to Calloway Peak, the highest point in the Blue Ridge range.",
+    travel: {
+      tucsonAZ: { hours:27, rec:"fly", airport:"Charlotte Douglas (CLT)", flight:4.0, airDrive:2.5 },
+      cincinnatiOH: { hours:6.5, rec:"drive" },
+      philadelphiaPA: { hours:8.5, rec:"fly", airport:"Charlotte Douglas (CLT)", flight:1.5, airDrive:2.5 }
+    }
+  },
+  {
+    id:5, name:"Mount Katahdin", location:"Baxter State Park, Maine", state:"ME",
+    lat:45.9044, lng:-68.9213, elevation:5269, distance:10.4, gain:4188, difficulty:5,
+    desc:"Maine's highest peak and the AT's northern terminus features the infamous Knife Edge, a narrow arête with 2,000-foot drops on either side.",
+    travel: {
+      tucsonAZ: { hours:40, rec:"fly", airport:"Bangor International (BGR)", flight:5.5, airDrive:2.5 },
+      cincinnatiOH: { hours:16, rec:"fly", airport:"Bangor International (BGR)", flight:3.0, airDrive:2.5 },
+      philadelphiaPA: { hours:12, rec:"fly", airport:"Bangor International (BGR)", flight:2.0, airDrive:2.5 }
+    }
+  },
+  {
+    id:6, name:"Franconia Ridge Loop", location:"White Mountains, New Hampshire", state:"NH",
+    lat:44.1553, lng:-71.6836, elevation:5260, distance:8.9, gain:3900, difficulty:4,
+    desc:"The finest loop hike in the Northeast traverses an exposed alpine ridgeline connecting Little Haystack, Mount Lincoln, and Mount Lafayette with breathtaking views.",
+    travel: {
+      tucsonAZ: { hours:38, rec:"fly", airport:"Manchester-Boston (MHT)", flight:5.0, airDrive:2.0 },
+      cincinnatiOH: { hours:14, rec:"fly", airport:"Manchester-Boston (MHT)", flight:2.5, airDrive:2.0 },
+      philadelphiaPA: { hours:7.0, rec:"drive" }
+    }
+  },
+  {
+    id:7, name:"Half Dome", location:"Yosemite National Park, California", state:"CA",
+    lat:37.7459, lng:-119.5332, elevation:8844, distance:14.2, gain:4800, difficulty:5,
+    desc:"Yosemite's most iconic summit requires a permit to ascend the final 400 feet via steel cables at a 46-degree angle, passing Vernal and Nevada Falls en route.",
+    travel: {
+      tucsonAZ: { hours:12.5, rec:"fly", airport:"Fresno Yosemite (FAT)", flight:2.5, airDrive:2.0 },
+      cincinnatiOH: { hours:36, rec:"fly", airport:"Fresno Yosemite (FAT)", flight:5.0, airDrive:2.0 },
+      philadelphiaPA: { hours:40, rec:"fly", airport:"Fresno Yosemite (FAT)", flight:5.5, airDrive:2.0 }
+    }
+  },
+  {
+    id:8, name:"Angels Landing", location:"Zion National Park, Utah", state:"UT",
+    lat:37.2692, lng:-112.9481, elevation:5790, distance:5.4, gain:1488, difficulty:4,
+    desc:"One of America's most thrilling hikes features Walter's Wiggles followed by a narrow sandstone fin with 1,000-foot drop-offs navigated by chain handrails.",
+    travel: {
+      tucsonAZ: { hours:7.5, rec:"drive" },
+      cincinnatiOH: { hours:24, rec:"fly", airport:"Las Vegas (LAS)", flight:3.5, airDrive:2.5 },
+      philadelphiaPA: { hours:35, rec:"fly", airport:"Las Vegas (LAS)", flight:5.0, airDrive:2.5 }
+    }
+  },
+  {
+    id:9, name:"The Enchantments Traverse", location:"Alpine Lakes Wilderness, Washington", state:"WA",
+    lat:47.5280, lng:-120.8220, elevation:7841, distance:19.0, gain:5500, difficulty:5,
+    desc:"A legendary traverse through pristine turquoise lakes, golden larches, and raw granite peaks. The crux is Aasgard Pass — 2,000 feet in under 1.5 miles of talus.",
+    travel: {
+      tucsonAZ: { hours:22, rec:"fly", airport:"Seattle-Tacoma (SEA)", flight:3.0, airDrive:2.5 },
+      cincinnatiOH: { hours:35, rec:"fly", airport:"Seattle-Tacoma (SEA)", flight:5.0, airDrive:2.5 },
+      philadelphiaPA: { hours:41, rec:"fly", airport:"Seattle-Tacoma (SEA)", flight:5.5, airDrive:2.5 }
+    }
+  },
+  {
+    id:10, name:"Maroon Bells Four Pass Loop", location:"Maroon Bells-Snowmass, Colorado", state:"CO",
+    lat:39.0711, lng:-106.9891, elevation:12500, distance:27.0, gain:7800, difficulty:5,
+    desc:"Colorado's premier backpacking loop crosses four passes above 12,000 feet through some of the most photographed mountain scenery in North America over 3-4 days.",
+    travel: {
+      tucsonAZ: { hours:13, rec:"fly", airport:"Aspen (ASE)", flight:3.5, airDrive:0.5 },
+      cincinnatiOH: { hours:22, rec:"fly", airport:"Aspen (ASE)", flight:4.5, airDrive:0.5 },
+      philadelphiaPA: { hours:28, rec:"fly", airport:"Aspen (ASE)", flight:5.0, airDrive:0.5 }
+    }
+  },
+  {
+    id:11, name:"Mount Rainier", location:"Mount Rainier National Park, Washington", state:"WA",
+    lat:46.8523, lng:-121.7603, elevation:14411, distance:16.0, gain:9100, difficulty:5,
+    desc:"The most glaciated peak in the lower 48 requires crampons, ice axes, and crevasse rescue skills. The DC route has only a 51% summit success rate.",
+    travel: {
+      tucsonAZ: { hours:22, rec:"fly", airport:"Seattle-Tacoma (SEA)", flight:3.0, airDrive:2.5 },
+      cincinnatiOH: { hours:35, rec:"fly", airport:"Seattle-Tacoma (SEA)", flight:5.0, airDrive:2.5 },
+      philadelphiaPA: { hours:41, rec:"fly", airport:"Seattle-Tacoma (SEA)", flight:5.5, airDrive:2.5 }
+    }
+  },
+  {
+    id:12, name:"Longs Peak", location:"Rocky Mountain NP, Colorado", state:"CO",
+    lat:40.2550, lng:-105.6152, elevation:14259, distance:15.0, gain:5100, difficulty:5,
+    desc:"RMNP's only fourteener requires a pre-dawn alpine start. Beyond the Keyhole, the route traverses the Ledges, the Trough, the Narrows, and the Homestretch.",
+    travel: {
+      tucsonAZ: { hours:14, rec:"fly", airport:"Denver (DEN)", flight:2.5, airDrive:2.0 },
+      cincinnatiOH: { hours:19, rec:"fly", airport:"Denver (DEN)", flight:3.0, airDrive:2.0 },
+      philadelphiaPA: { hours:27, rec:"fly", airport:"Denver (DEN)", flight:4.0, airDrive:2.0 }
+    }
+  },
+  {
+    id:13, name:"Mount Whitney", location:"Inyo National Forest, California", state:"CA",
+    lat:36.5785, lng:-118.2923, elevation:14505, distance:21.4, gain:6100, difficulty:5,
+    desc:"The highest peak in the contiguous US covers 21+ miles with 6,000+ feet of gain above 8,000 feet, including 97 switchbacks and an exposed ridgeline finish.",
+    travel: {
+      tucsonAZ: { hours:10, rec:"fly", airport:"Los Angeles (LAX)", flight:1.5, airDrive:4.0 },
+      cincinnatiOH: { hours:32, rec:"fly", airport:"Los Angeles (LAX)", flight:4.5, airDrive:4.0 },
+      philadelphiaPA: { hours:38, rec:"fly", airport:"Los Angeles (LAX)", flight:5.5, airDrive:4.0 }
+    }
+  },
+  {
+    id:14, name:"Sky Pond via Glacier Gorge", location:"Rocky Mountain NP, Colorado", state:"CO",
+    lat:40.2750, lng:-105.6400, elevation:10900, distance:9.5, gain:2125, difficulty:3,
+    desc:"Strings together spectacular alpine lakes culminating at Sky Pond beneath the dramatic Sharkstooth spire. Requires scrambling up Timberline Falls to reach the upper basin.",
+    travel: {
+      tucsonAZ: { hours:14, rec:"fly", airport:"Denver (DEN)", flight:2.5, airDrive:2.0 },
+      cincinnatiOH: { hours:19, rec:"fly", airport:"Denver (DEN)", flight:3.0, airDrive:2.0 },
+      philadelphiaPA: { hours:27, rec:"fly", airport:"Denver (DEN)", flight:4.0, airDrive:2.0 }
+    }
+  },
+  {
+    id:15, name:"Havasupai Falls", location:"Grand Canyon, Arizona", state:"AZ",
+    lat:36.2553, lng:-112.6979, elevation:5200, distance:20.0, gain:2500, difficulty:3,
+    desc:"A 10-mile descent into a Grand Canyon side canyon leads to stunning turquoise Havasu Falls, one of the most photographed waterfalls in the world on Havasupai tribal land.",
+    travel: {
+      tucsonAZ: { hours:6.5, rec:"drive" },
+      cincinnatiOH: { hours:28, rec:"fly", airport:"Las Vegas (LAS)", flight:3.5, airDrive:4.0 },
+      philadelphiaPA: { hours:35, rec:"fly", airport:"Las Vegas (LAS)", flight:5.0, airDrive:4.0 }
+    }
+  },
+  {
+    id:17, name:"The Narrows", location:"Zion National Park, Utah", state:"UT",
+    lat:37.3050, lng:-112.9477, elevation:4500, distance:9.4, gain:334, difficulty:3,
+    desc:"Hiking through the Virgin River between 1,000-foot slot canyon walls barely 20 feet apart — wading waist-deep over slippery boulders — is one of the world's most unique hikes.",
+    travel: {
+      tucsonAZ: { hours:7.5, rec:"drive" },
+      cincinnatiOH: { hours:24, rec:"fly", airport:"Las Vegas (LAS)", flight:3.5, airDrive:2.5 },
+      philadelphiaPA: { hours:35, rec:"fly", airport:"Las Vegas (LAS)", flight:5.0, airDrive:2.5 }
+    }
+  },
+  {
+    id:19, name:"Humphreys Peak", location:"Kachina Peaks, Flagstaff, Arizona", state:"AZ",
+    lat:35.3464, lng:-111.6780, elevation:12633, distance:10.0, gain:3400, difficulty:4,
+    desc:"Arizona's highest peak offers a surprising subalpine experience in the desert state, climbing through ponderosa pine to barren alpine tundra with Grand Canyon views.",
+    travel: {
+      tucsonAZ: { hours:4.5, rec:"drive" },
+      cincinnatiOH: { hours:25, rec:"fly", airport:"Phoenix (PHX)", flight:3.5, airDrive:2.5 },
+      philadelphiaPA: { hours:34, rec:"fly", airport:"Phoenix (PHX)", flight:5.0, airDrive:2.5 }
+    }
+  },
+  {
+    id:20, name:"Grays & Torreys Peaks", location:"Arapaho NF, Colorado", state:"CO",
+    lat:39.6339, lng:-105.8178, elevation:14278, distance:8.4, gain:3000, difficulty:3,
+    desc:"The best beginner fourteener combo in Colorado bags two 14ers in one outing along a well-worn Class 1 trail with panoramic Continental Divide views.",
+    travel: {
+      tucsonAZ: { hours:14, rec:"fly", airport:"Denver (DEN)", flight:2.5, airDrive:1.5 },
+      cincinnatiOH: { hours:19, rec:"fly", airport:"Denver (DEN)", flight:3.0, airDrive:1.5 },
+      philadelphiaPA: { hours:27, rec:"fly", airport:"Denver (DEN)", flight:4.0, airDrive:1.5 }
+    }
+  },
+  {
+    id:21, name:"Harding Icefield Trail", location:"Kenai Fjords NP, Alaska", state:"AK",
+    lat:60.1870, lng:-149.6320, elevation:3800, distance:8.2, gain:3234, difficulty:4,
+    desc:"Climbs from Exit Glacier to an overlook of the Harding Icefield — the largest ice field entirely within the US at over 700 square miles of endless ice stretching to the horizon.",
+    travel: {
+      tucsonAZ: { hours:65, rec:"fly", airport:"Anchorage (ANC)", flight:6.0, airDrive:2.5 },
+      cincinnatiOH: { hours:65, rec:"fly", airport:"Anchorage (ANC)", flight:8.0, airDrive:2.5 },
+      philadelphiaPA: { hours:65, rec:"fly", airport:"Anchorage (ANC)", flight:8.5, airDrive:2.5 }
+    }
+  },
+  {
+    id:23, name:"Mount Elbert", location:"San Isabel NF, Colorado", state:"CO",
+    lat:39.1178, lng:-106.4453, elevation:14439, distance:9.5, gain:4700, difficulty:4,
+    desc:"Colorado's highest peak and the second-highest in the contiguous US is deceptively challenging — relentless gain above 10,000 feet with multiple false summits in thin air.",
+    travel: {
+      tucsonAZ: { hours:13, rec:"fly", airport:"Denver (DEN)", flight:2.5, airDrive:3.0 },
+      cincinnatiOH: { hours:21, rec:"fly", airport:"Denver (DEN)", flight:3.0, airDrive:3.0 },
+      philadelphiaPA: { hours:28, rec:"fly", airport:"Denver (DEN)", flight:4.0, airDrive:3.0 }
+    }
+  },
+  {
+    id:24, name:"McAfee Knob", location:"Appalachian Trail, Virginia", state:"VA",
+    lat:37.3934, lng:-80.0356, elevation:3197, distance:7.9, gain:1830, difficulty:3,
+    desc:"The most photographed overlook on the entire 2,190-mile Appalachian Trail — a cantilevered rock ledge jutting out over the Catawba Valley.",
+    travel: {
+      tucsonAZ: { hours:30, rec:"fly", airport:"Roanoke (ROA)", flight:4.5, airDrive:0.5 },
+      cincinnatiOH: { hours:6.0, rec:"drive" },
+      philadelphiaPA: { hours:5.5, rec:"drive" }
+    }
+  },
+  {
+    id:26, name:"Black Elk Peak", location:"Black Hills, South Dakota", state:"SD",
+    lat:43.8661, lng:-103.5325, elevation:7244, distance:7.0, gain:1459, difficulty:2,
+    desc:"The highest point east of the Rockies features a loop through granite spires and pine forests to a historic stone fire lookout tower with views of the Black Hills and Badlands.",
+    travel: {
+      tucsonAZ: { hours:18, rec:"fly", airport:"Rapid City (RAP)", flight:3.5, airDrive:0.75 },
+      cincinnatiOH: { hours:17, rec:"fly", airport:"Rapid City (RAP)", flight:3.5, airDrive:0.75 },
+      philadelphiaPA: { hours:25, rec:"fly", airport:"Rapid City (RAP)", flight:4.5, airDrive:0.75 }
+    }
+  },
+  // === NEW EAST COAST HIKES ===
+  {
+    id:27, name:"Mount Washington", location:"White Mountain NF, New Hampshire", state:"NH",
+    lat:44.2576, lng:-71.2537, elevation:6288, distance:8.4, gain:4300, difficulty:5,
+    desc:"Home to the 'world's worst weather' with recorded winds of 231 mph, the Tuckerman Ravine Trail climbs relentlessly through a glacial cirque to the highest peak in the Northeast.",
+    travel: {
+      tucsonAZ: { hours:38, rec:"fly", airport:"Manchester-Boston (MHT)", flight:5.0, airDrive:2.5 },
+      cincinnatiOH: { hours:14, rec:"fly", airport:"Manchester-Boston (MHT)", flight:2.5, airDrive:2.5 },
+      philadelphiaPA: { hours:7.0, rec:"drive" }
+    }
+  },
+  {
+    id:28, name:"Mount Marcy", location:"Adirondack High Peaks, New York", state:"NY",
+    lat:44.1830, lng:-73.9645, elevation:5344, distance:14.8, gain:3166, difficulty:4,
+    desc:"New York's highest peak offers a long wilderness approach through boreal forest to an exposed alpine summit with panoramic views of the surrounding 46 High Peaks.",
+    travel: {
+      tucsonAZ: { hours:36, rec:"fly", airport:"Burlington (BTV)", flight:5.5, airDrive:2.0 },
+      cincinnatiOH: { hours:11, rec:"fly", airport:"Burlington (BTV)", flight:3.0, airDrive:2.0 },
+      philadelphiaPA: { hours:6.0, rec:"drive" }
+    }
+  },
+  {
+    id:29, name:"Whiteface Mountain", location:"Adirondack Mountains, New York", state:"NY",
+    lat:44.3659, lng:-73.9026, elevation:4867, distance:10.4, gain:3620, difficulty:4,
+    desc:"The fifth-highest Adirondack peak features an exposed alpine summit with sweeping views of Lake Champlain, the Green Mountains, and the surrounding High Peaks.",
+    travel: {
+      tucsonAZ: { hours:36, rec:"fly", airport:"Burlington (BTV)", flight:5.5, airDrive:1.5 },
+      cincinnatiOH: { hours:11, rec:"fly", airport:"Burlington (BTV)", flight:3.0, airDrive:1.5 },
+      philadelphiaPA: { hours:6.0, rec:"drive" }
+    }
+  },
+  {
+    id:30, name:"Mount Mansfield", location:"Mount Mansfield State Forest, Vermont", state:"VT",
+    lat:44.5290, lng:-72.8428, elevation:4393, distance:5.3, gain:2837, difficulty:4,
+    desc:"Vermont's highest peak features a dramatic ridgeline resembling a human face in profile. The exposed alpine tundra summit offers commanding views of Lake Champlain and the White Mountains.",
+    travel: {
+      tucsonAZ: { hours:37, rec:"fly", airport:"Burlington (BTV)", flight:5.5, airDrive:0.75 },
+      cincinnatiOH: { hours:13, rec:"fly", airport:"Burlington (BTV)", flight:2.5, airDrive:0.75 },
+      philadelphiaPA: { hours:6.5, rec:"drive" }
+    }
+  },
+  {
+    id:31, name:"Camel's Hump", location:"Camel's Hump State Park, Vermont", state:"VT",
+    lat:44.3170, lng:-72.8270, elevation:4083, distance:6.8, gain:2583, difficulty:3,
+    desc:"The only undeveloped peak above 4,000 feet in Vermont, with a distinctive silhouette, rare arctic-alpine tundra, and 360-degree views stretching from the Adirondacks to the White Mountains.",
+    travel: {
+      tucsonAZ: { hours:37, rec:"fly", airport:"Burlington (BTV)", flight:5.5, airDrive:1.0 },
+      cincinnatiOH: { hours:13, rec:"fly", airport:"Burlington (BTV)", flight:2.5, airDrive:1.0 },
+      philadelphiaPA: { hours:6.5, rec:"drive" }
+    }
+  },
+  {
+    id:32, name:"Charlies Bunion", location:"Great Smoky Mountains NP, TN/NC", state:"TN/NC",
+    lat:35.6110, lng:-83.4248, elevation:5565, distance:8.0, gain:1640, difficulty:3,
+    desc:"One of the Smokies' most dramatic viewpoints — a rocky outcrop jutting from the AT ridgeline with sheer drops and panoramic views into the heart of the Great Smoky Mountains.",
+    travel: {
+      tucsonAZ: { hours:26, rec:"fly", airport:"McGhee Tyson (TYS)", flight:4.0, airDrive:1.5 },
+      cincinnatiOH: { hours:5.0, rec:"drive" },
+      philadelphiaPA: { hours:9.5, rec:"fly", airport:"McGhee Tyson (TYS)", flight:2.0, airDrive:1.5 }
+    }
+  },
+  {
+    id:33, name:"Roan Highlands", location:"Roan Mountain, Tennessee/North Carolina", state:"TN/NC",
+    lat:36.1064, lng:-82.1111, elevation:6285, distance:9.6, gain:2350, difficulty:3,
+    desc:"The longest stretch of grassy balds in the Appalachian Mountains — nearly 1,000 acres of open mountaintop meadow with uninterrupted 360-degree views along the AT.",
+    travel: {
+      tucsonAZ: { hours:26, rec:"fly", airport:"Tri-Cities (TRI)", flight:4.5, airDrive:1.0 },
+      cincinnatiOH: { hours:5.0, rec:"drive" },
+      philadelphiaPA: { hours:8.5, rec:"fly", airport:"Tri-Cities (TRI)", flight:2.0, airDrive:1.0 }
+    }
+  },
+  {
+    id:34, name:"Mount Rogers via Grayson Highlands", location:"Grayson Highlands SP, Virginia", state:"VA",
+    lat:36.6594, lng:-81.5121, elevation:5729, distance:9.0, gain:2300, difficulty:3,
+    desc:"The trail to Virginia's highest peak crosses wide-open highland meadows where wild ponies graze freely, passing massive rock outcroppings with sweeping ridgeline views.",
+    travel: {
+      tucsonAZ: { hours:28, rec:"fly", airport:"Tri-Cities (TRI)", flight:4.5, airDrive:1.5 },
+      cincinnatiOH: { hours:5.5, rec:"drive" },
+      philadelphiaPA: { hours:7.0, rec:"drive" }
+    }
+  },
+  {
+    id:35, name:"Looking Glass Rock", location:"Pisgah National Forest, North Carolina", state:"NC",
+    lat:35.2910, lng:-82.7767, elevation:3969, distance:6.5, gain:1700, difficulty:3,
+    desc:"This iconic granite pluton rises 1,500 feet above the valley floor. The trail climbs through hardwood forest to a breathtaking open rock face summit with sweeping Blue Ridge views.",
+    travel: {
+      tucsonAZ: { hours:27, rec:"fly", airport:"Asheville Regional (AVL)", flight:4.5, airDrive:0.75 },
+      cincinnatiOH: { hours:7.0, rec:"drive" },
+      philadelphiaPA: { hours:9.0, rec:"fly", airport:"Asheville Regional (AVL)", flight:2.0, airDrive:0.75 }
+    }
+  },
+  {
+    id:36, name:"Dolly Sods Wilderness", location:"Monongahela NF, West Virginia", state:"WV",
+    lat:39.0635, lng:-79.3033, elevation:4728, distance:10.8, gain:1158, difficulty:3,
+    desc:"Often called 'a little piece of Canada in West Virginia' — a high-elevation plateau with stunted spruce forests, windswept bogs, and sweeping vistas unlike anything else on the East Coast.",
+    travel: {
+      tucsonAZ: { hours:31, rec:"fly", airport:"Pittsburgh (PIT)", flight:4.5, airDrive:3.0 },
+      cincinnatiOH: { hours:6.0, rec:"drive" },
+      philadelphiaPA: { hours:6.0, rec:"drive" }
+    }
+  },
+  {
+    id:37, name:"Blood Mountain", location:"Chattahoochee NF, Georgia", state:"GA",
+    lat:34.7429, lng:-83.9213, elevation:4458, distance:4.6, gain:1361, difficulty:3,
+    desc:"The highest peak on the Georgia AT rewards with a historic stone shelter at the summit and panoramic southern Appalachian views, steeped in Cherokee and Creek legend.",
+    travel: {
+      tucsonAZ: { hours:24, rec:"fly", airport:"Atlanta (ATL)", flight:4.0, airDrive:1.5 },
+      cincinnatiOH: { hours:6.0, rec:"drive" },
+      philadelphiaPA: { hours:11, rec:"fly", airport:"Atlanta (ATL)", flight:2.0, airDrive:1.5 }
+    }
+  },
+  {
+    id:38, name:"The Priest", location:"George Washington NF, Virginia", state:"VA",
+    lat:37.8242, lng:-79.0822, elevation:4063, distance:9.2, gain:3418, difficulty:4,
+    desc:"One of the most grueling AT day hikes — over 3,000 feet of relentless ascent from the Tye River Valley. A humorous 'confessional' register at the top invites hikers to document their suffering.",
+    travel: {
+      tucsonAZ: { hours:31, rec:"fly", airport:"Charlottesville (CHO)", flight:5.0, airDrive:1.0 },
+      cincinnatiOH: { hours:7.0, rec:"drive" },
+      philadelphiaPA: { hours:5.5, rec:"drive" }
+    }
+  },
+  {
+    id:39, name:"Springer Mountain", location:"Amicalola Falls SP, Georgia", state:"GA",
+    lat:34.5690, lng:-84.2480, elevation:3782, distance:16.2, gain:4137, difficulty:4,
+    desc:"The legendary pilgrimage to the AT's southern terminus begins at Georgia's tallest waterfall (729 ft) and climbs through wilderness to the bronze AT plaque — where thousands of thru-hike dreams begin.",
+    travel: {
+      tucsonAZ: { hours:24, rec:"fly", airport:"Atlanta (ATL)", flight:4.0, airDrive:1.5 },
+      cincinnatiOH: { hours:6.5, rec:"drive" },
+      philadelphiaPA: { hours:11.5, rec:"fly", airport:"Atlanta (ATL)", flight:2.0, airDrive:1.5 }
+    }
+  }
+];
+
+const DIFF_LABELS = ['', 'Easy', 'Moderate', 'Strenuous', 'Very Hard', 'Expert'];
+
+// ==================== TRAVEL BURDEN SCORING & SORTING ====================
+// Prioritize hikes drivable by the most origins, then break ties by avg travel time
+function getDriveCount(hike) {
+  let count = 0;
+  for (const key of ['tucsonAZ','cincinnatiOH','philadelphiaPA']) {
+    if (hike.travel[key].rec === 'drive') count++;
+  }
+  return count;
+}
+
+function getAvgTravelTime(hike) {
+  let total = 0;
+  for (const key of ['tucsonAZ','cincinnatiOH','philadelphiaPA']) {
+    const t = hike.travel[key];
+    if (t.rec === 'drive') {
+      total += t.hours;
+    } else {
+      total += (t.flight || 0) + (t.airDrive || 0) + 2;
+    }
+  }
+  return total / 3;
+}
+
+HIKES.sort((a, b) => {
+  const driveDiff = getDriveCount(b) - getDriveCount(a); // more drivable = first
+  if (driveDiff !== 0) return driveDiff;
+  return getAvgTravelTime(a) - getAvgTravelTime(b); // then shorter travel time
+});
+
+// ==================== MAP SETUP ====================
+const map = L.map('map', { center: [39.5, -98.5], zoom: 5, zoomControl: false });
+L.control.zoom({ position: 'topright' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+// Origin city markers
+for (const [key, origin] of Object.entries(ORIGINS)) {
+  const el = document.createElement('div');
+  el.className = 'origin-marker';
+  el.style.background = origin.color;
+  const icon = L.divIcon({ html: el.outerHTML, className: '', iconSize: [12, 12], iconAnchor: [6, 6] });
+  L.marker([origin.lat, origin.lng], { icon, interactive: false }).addTo(map);
+}
+
+// ==================== MARKERS (no pulse by default) ====================
+const markers = {};
+let activeHikeId = null;
+
+HIKES.forEach(hike => {
+  const el = document.createElement('div');
+  el.className = 'marker-glow';
+  el.id = 'marker-' + hike.id;
+  const icon = L.divIcon({ html: el.outerHTML, className: '', iconSize: [14, 14], iconAnchor: [7, 7] });
+  const marker = L.marker([hike.lat, hike.lng], { icon }).addTo(map);
+  markers[hike.id] = marker;
+
+  marker.on('click', () => {
+    selectHike(hike.id, true);
+  });
+});
+
+function getMarkerEl(id) { return document.getElementById('marker-' + id); }
+
+function clearActiveMarker() {
+  if (activeHikeId !== null) {
+    const mel = getMarkerEl(activeHikeId);
+    if (mel) mel.classList.remove('active');
+  }
+}
+
+// ==================== SELECT HIKE (unified) ====================
+function selectHike(id, flyTo) {
+  // Deselect previous
+  clearActiveMarker();
+  clearTravelLines();
+  document.querySelectorAll('.hike-card.active').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.travel-info.open').forEach(el => el.classList.remove('open'));
+  document.querySelectorAll('.travel-toggle.open').forEach(el => el.classList.remove('open'));
+
+  // If clicking same hike, deselect
+  if (activeHikeId === id) {
+    activeHikeId = null;
+    return;
+  }
+
+  activeHikeId = id;
+  const hike = HIKES.find(h => h.id === id);
+
+  // Activate marker
+  const mel = getMarkerEl(id);
+  if (mel) mel.classList.add('active');
+
+  // Fly map
+  if (flyTo && hike) {
+    map.flyTo([hike.lat, hike.lng], 8, { duration: 0.8 });
+  }
+
+  // Highlight card & scroll
+  const card = document.getElementById('card-' + id);
+  if (card) {
+    card.classList.add('active');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // Open travel info
+  const infoEl = document.getElementById('travel-' + id);
+  const toggleBtn = document.querySelector(`.travel-toggle[data-hike="${id}"]`);
+  if (infoEl) infoEl.classList.add('open');
+  if (toggleBtn) toggleBtn.classList.add('open');
+  drawTravelLines(id);
+}
+
+// ==================== SIDE PANEL CARDS ====================
+const cardList = document.getElementById('cardList');
+document.getElementById('hikeCount').textContent = HIKES.length + ' iconic hikes across the US';
+
+HIKES.forEach((hike, idx) => {
+  const card = document.createElement('div');
+  card.className = 'hike-card';
+  card.id = 'card-' + hike.id;
+  card.style.animationDelay = (idx * 0.04) + 's';
+
+  const diffSegs = Array.from({length:5}, (_, i) =>
+    `<div class="diff-seg ${i < hike.difficulty ? 'filled' : ''}"></div>`
+  ).join('');
+
+  const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${hike.lat},${hike.lng}`;
+
+  let travelHtml = '';
+  for (const [key, origin] of Object.entries(ORIGINS)) {
+    const t = hike.travel[key];
+    let recText, noteText;
+    if (t.rec === 'drive') {
+      recText = `🚗 Drive — ${t.hours}h`;
+      noteText = 'Within easy driving range';
+    } else {
+      recText = `✈️ Fly to ${t.airport} — ~${t.flight}h flight`;
+      noteText = `${t.airDrive}h drive from airport`;
+    }
+    travelHtml += `
+      <div class="origin-row">
+        <div class="origin-dot ${origin.cssClass}"></div>
+        <div class="origin-detail">
+          <div class="origin-name">${origin.label}</div>
+          <div class="origin-rec">${recText}</div>
+          <div class="origin-note">${noteText}</div>
+        </div>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="card-body">
+      <div class="rank-badge">#${idx + 1}</div>
+      <div class="hike-name">${hike.name}</div>
+      <div class="hike-location">${hike.location}</div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Summit</div>
+          <div class="stat-value">${hike.elevation.toLocaleString()}<span class="unit"> ft</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Distance</div>
+          <div class="stat-value">${hike.distance}<span class="unit"> mi RT</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Elev Gain</div>
+          <div class="stat-value">${hike.gain.toLocaleString()}<span class="unit"> ft</span></div>
+        </div>
+      </div>
+      <div class="difficulty-row">
+        <div class="diff-label">Difficulty</div>
+        <div class="diff-bar">${diffSegs}</div>
+        <div class="diff-text">${DIFF_LABELS[hike.difficulty]}</div>
+      </div>
+      <div class="desc">${hike.desc}</div>
+      <div class="btn-row">
+        <a class="gmaps-btn" href="${gmapsUrl}" target="_blank" rel="noopener">📍 Directions</a>
+        <button class="travel-toggle" data-hike="${hike.id}">🗺️ Travel Info</button>
+      </div>
+    </div>
+    <div class="travel-info" id="travel-${hike.id}">
+      <div class="travel-info-inner">${travelHtml}</div>
+    </div>`;
+
+  // Card hover -> marker bounce
+  card.addEventListener('mouseenter', () => {
+    const mel = getMarkerEl(hike.id);
+    if (mel && activeHikeId !== hike.id) mel.classList.add('hover-glow');
+  });
+  card.addEventListener('mouseleave', () => {
+    const mel = getMarkerEl(hike.id);
+    if (mel) mel.classList.remove('hover-glow');
+  });
+
+  // Card click -> select hike (fly to + open travel)
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('.gmaps-btn')) return;
+    if (e.target.closest('.travel-toggle')) {
+      // Toggle just acts as select too
+      e.stopPropagation();
+      selectHike(hike.id, true);
+      return;
+    }
+    selectHike(hike.id, true);
+  });
+
+  cardList.appendChild(card);
+});
+
+// ==================== TRAVEL LINE ANIMATION ====================
+let activeTravelLines = [];
+let activeTravelMarkers = [];
+let animationFrames = [];
+
+function clearTravelLines() {
+  activeTravelLines.forEach(l => map.removeLayer(l));
+  activeTravelLines = [];
+  activeTravelMarkers.forEach(m => map.removeLayer(m));
+  activeTravelMarkers = [];
+  animationFrames.forEach(id => cancelAnimationFrame(id));
+  animationFrames = [];
+}
+
+function drawTravelLines(hikeId) {
+  const hike = HIKES.find(h => h.id === hikeId);
+  if (!hike) return;
+
+  ['tucsonAZ', 'cincinnatiOH', 'philadelphiaPA'].forEach(key => {
+    const origin = ORIGINS[key];
+    const t = hike.travel[key];
+    const from = [origin.lat, origin.lng];
+    const to = [hike.lat, hike.lng];
+
+    const line = L.polyline([from, to], {
+      color: origin.color, weight: 2.5, opacity: 0.8,
+      dashArray: '12 8', className: 'travel-line-anim'
+    }).addTo(map);
+    activeTravelLines.push(line);
+
+    const iconChar = t.rec === 'fly' ? '✈️' : '🚗';
+    animateIconAlongLine(from, to, iconChar);
+  });
+}
+
+function animateIconAlongLine(from, to, iconChar) {
+  const iconEl = L.divIcon({
+    html: `<div class="travel-icon">${iconChar}</div>`,
+    className: '', iconSize: [20, 20], iconAnchor: [10, 10]
+  });
+  const iconMarker = L.marker(from, { icon: iconEl, interactive: false }).addTo(map);
+  activeTravelMarkers.push(iconMarker);
+
+  const duration = 3000;
+  let startTime = null;
+
+  function step(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const progress = ((timestamp - startTime) % duration) / duration;
+    const lat = from[0] + (to[0] - from[0]) * progress;
+    const lng = from[1] + (to[1] - from[1]) * progress;
+    iconMarker.setLatLng([lat, lng]);
+    const frameId = requestAnimationFrame(step);
+    animationFrames.push(frameId);
+  }
+  const frameId = requestAnimationFrame(step);
+  animationFrames.push(frameId);
+}
+
+// ==================== MOBILE RESPONSIVE BEHAVIOR ====================
+const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
+const panel = document.getElementById('panel');
+const peekBar = document.getElementById('peekBar');
+const peekName = document.getElementById('peekName');
+const peekLocation = document.getElementById('peekLocation');
+const minimizeBtn = document.getElementById('minimizeBtn');
+
+// Fly map so the point appears centered in the VISIBLE portion above the panel
+function flyToVisible(lat, lng, zoom) {
+  if (!isMobile()) {
+    map.flyTo([lat, lng], zoom, { duration: 0.8 });
+    return;
+  }
+  // Panel covers bottom 55vh; we want to center in the top 45vh
+  // Offset the target south so it lands in the visible strip
+  const panelH = panel.classList.contains('minimized') ? 70 : window.innerHeight * 0.55;
+  const visibleH = window.innerHeight - panelH;
+  const targetPixelY = visibleH / 2; // center of visible area
+  const mapCenterPixelY = window.innerHeight / 2;
+  const offsetPixels = mapCenterPixelY - targetPixelY;
+
+  // Convert pixel offset to lat at current zoom
+  const point = map.project([lat, lng], zoom);
+  point.y += offsetPixels;
+  const adjusted = map.unproject(point, zoom);
+  map.flyTo(adjusted, zoom, { duration: 0.8 });
+}
+
+function mobileMinimize() {
+  if (!isMobile()) return;
+  const hike = activeHikeId ? HIKES.find(h => h.id === activeHikeId) : null;
+  panel.classList.add('minimized');
+  peekBar.classList.add('visible');
+  if (hike) {
+    peekName.textContent = hike.name;
+    peekLocation.textContent = hike.location;
+  } else {
+    peekName.textContent = HIKES.length + ' hikes';
+    peekLocation.textContent = 'Tap to browse';
+  }
+  setTimeout(() => {
+    map.invalidateSize();
+    if (hike) flyToVisible(hike.lat, hike.lng, 8);
+  }, 380);
+}
+
+function mobileRestore() {
+  if (!isMobile()) return;
+  panel.classList.remove('minimized');
+  peekBar.classList.remove('visible');
+  setTimeout(() => {
+    map.invalidateSize();
+    if (activeHikeId) {
+      const hike = HIKES.find(h => h.id === activeHikeId);
+      if (hike) flyToVisible(hike.lat, hike.lng, 8);
+      const card = document.getElementById('card-' + activeHikeId);
+      if (card) card.scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+  }, 380);
+}
+
+// Minimize button in header
+minimizeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  mobileMinimize();
+});
+
+// Peek bar -> restore panel
+peekBar.addEventListener('click', () => mobileRestore());
+
+// Patch selectHike for mobile: keep panel at 55%, center map in visible area
+const _origSelectHike = selectHike;
+selectHike = function(id, flyTo) {
+  // If minimized and tapping a marker, restore panel first
+  if (isMobile() && panel.classList.contains('minimized')) {
+    panel.classList.remove('minimized');
+    peekBar.classList.remove('visible');
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+
+  _origSelectHike(id, flyTo);
+
+  // Override the flyTo to use visible-area centering on mobile
+  if (isMobile() && activeHikeId !== null) {
+    const hike = HIKES.find(h => h.id === activeHikeId);
+    if (hike) {
+      setTimeout(() => flyToVisible(hike.lat, hike.lng, 8), 100);
+    }
+  }
+};
+
+// On resize, reset mobile states
+window.addEventListener('resize', () => {
+  if (!isMobile()) {
+    panel.classList.remove('minimized');
+    peekBar.classList.remove('visible');
+  }
+  map.invalidateSize();
+});
+</script>
+</body>
+</html>
