@@ -779,7 +779,7 @@ function selectHike(id, flyTo) {
 
   // Fly map
   if (flyTo && hike) {
-    map.flyTo([hike.lat, hike.lng], 8, { duration: 0.8 });
+    map.flyTo([hike.lat, hike.lng], 6, { duration: 0.8 });
   }
 
   // Highlight card & scroll
@@ -996,7 +996,7 @@ function mobileMinimize() {
   }
   setTimeout(() => {
     map.invalidateSize();
-    if (hike) flyToVisible(hike.lat, hike.lng, 8);
+    if (hike) flyToVisible(hike.lat, hike.lng, 6);
   }, 380);
 }
 
@@ -1008,7 +1008,7 @@ function mobileRestore() {
     map.invalidateSize();
     if (activeHikeId) {
       const hike = HIKES.find(h => h.id === activeHikeId);
-      if (hike) flyToVisible(hike.lat, hike.lng, 8);
+      if (hike) flyToVisible(hike.lat, hike.lng, 6);
       const card = document.getElementById('card-' + activeHikeId);
       if (card) card.scrollIntoView({ behavior:'smooth', block:'center' });
     }
@@ -1040,7 +1040,7 @@ selectHike = function(id, flyTo) {
   if (isMobile() && activeHikeId !== null) {
     const hike = HIKES.find(h => h.id === activeHikeId);
     if (hike) {
-      setTimeout(() => flyToVisible(hike.lat, hike.lng, 8), 100);
+      setTimeout(() => flyToVisible(hike.lat, hike.lng, 6), 100);
     }
   }
 };
