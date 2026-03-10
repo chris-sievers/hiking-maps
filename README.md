@@ -1,6 +1,6 @@
-# US Hiking Bucket List Map
+# US Hiking List Map
 
-Single-file interactive map of 35 bucket-list hikes across the US, built with Leaflet.js on dark CARTO tiles.
+Single-file interactive map of 35 hikes across the US, built with Leaflet.js on dark CARTO tiles.
 
 **Live:** https://chris-sievers.github.io/hiking-maps/
 
